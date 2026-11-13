@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mi Asistente de Dinero</title>
+<style>
+  :root{
+    --bg:#f6f3ee; --card:#ffffff; --ink:#2b2a28; --mute:#8a847b; --line:#ece7df;
+    --ok:#4f9d7a; --warn:#d9893b; --bad:#c9605a; --accent:#5b7c99; --r:20px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#1c1b1a; --card:#262523; --ink:#f1ede6; --mute:#a09a90; --line:#35332f;}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+  main{max-width:480px;margin:0 auto;padding:20px 16px 48px}
+  h1{font-size:20px;margin:4px 0 16px;font-weight:650}
+  h2{font-size:14px;margin:0 0 12px;color:var(--mute);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+  .card{background:var(--card);border-radius:var(--r);padding:18px;margin-bottom:14px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .hero{text-align:center;padding:24px 18px}
+  .hero .label{color:var(--mute);font-size:14px}
+  .hero .big{font-size:44px;font-weight:700;margin:6px 0;color:var(--bad)}
+  .hero.ok .big{color:var(--ok)}
+  .hero .msg{font-size:15px;color:var(--ink)}
+  .bar{height:8px;background:var(--line);border-radius:99px;margin:14px 0 4px;overflow:hidden}
+  .bar>i{display:block;height:100%;width:0;background:var(--bad);border-radius:99px;transition:width .4s}
+  .hero.ok .bar>i{background:var(--ok)}
+  .bar-note{font-size:12px;color:var(--mute)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  label{display:block;font-size:12px;color:var(--mute);margin-bottom:4px}
+  input,select,button{font:inherit;color:inherit}
+  input,select{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+  button{width:100%;padding:13px;border:0;border-radius:14px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;margin-top:10px}
+  button:active{transform:scale(.99)}
+  .row{display:flex;gap:10px;margin-bottom:10px}
+  .row>*{flex:1}
+  .verdict{margin-top:12px;padding:12px 14px;border-radius:14px;font-size:15px;display:none}
+  .verdict.yes{display:block;background:rgba(79,157,122,.14)}
+  .verdict.no{display:block;background:rgba(201,96,90,.14)}
+  .toast{font-size:13px;color:var(--ok);min-height:18px;margin-top:8px;text-align:center}
+  ul{list-style:none;margin:0;padding:0}
+  li{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
+  li:last-child{border-bottom:0}
+  li small{display:block;color:var(--mute)}
+  .neg{color:var(--bad)} .pos{color:var(--ok)}
+  .empty{color:var(--mute);font-size:14px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Mi Asistente de Dinero</h1>
+
+  <section class="card hero" id="hero">
+    <div class="label">Margen de compra</div>
+    <div class="big" id="margen">$0.00</div>
+    <div class="msg" id="msg"></div>
+    <div class="bar"><i id="barfill"></i></div>
+    <div class="bar-note" id="barnote"></div>
+  </section>
+
+  <section class="card">
+    <h2>¿Puedo comprarlo?</h2>
+    <label for="q">Cuánto cuesta</label>
+    <input id="q" type="number" inputmode="decimal" min="0" step="any" placeholder="Ej. 250">
+    <div class="verdict" id="verdict"></div>
+  </section>
+
+  <section class="card">
+    <h2>Registrar</h2>
+    <div class="row">
+      <div><label for="tipo">Qué pasó</label>
+        <select id="tipo">
+          <option value="gasto">Gasté</option>
+          <option value="ingreso">Me entró</option>
+          <option value="pago">Pagué la tarjeta</option>
+        </select></div>
+      <div><label for="cuenta">De / a</label>
+        <select id="cuenta">
+          <option value="efectivo">Efectivo</option>
+          <option value="cajita">Cajita Nu</option>
+          <option value="tarjeta">Tarjeta de crédito</option>
+        </select></div>
+    </div>
+    <div class="row">
+      <div><label for="monto">Monto</label>
+        <input id="monto" type="number" inputmode="decimal" min="0" step="any" placeholder="150"></div>
+      <div><label for="nota">Nota</label>
+        <input id="nota" type="text" placeholder="corte de cabello"></div>
+    </div>
+    <button id="guardar">Guardar</button>
+    <div class="toast" id="toast"></div>
+  </section>
+
+  <section class="card">
+    <h2>Mis saldos</h2>
+    <div class="grid">
+      <div><label for="efectivo">Efectivo</label><input id="efectivo" type="number" inputmode="decimal" step="any"></div>
+      <div><label for="cajita">Cajita Nu</label><input id="cajita" type="number" inputmode="decimal" step="any"></div>
+      <div><label for="deuda">Deuda de tarjeta</label><input id="deuda" type="number" inputmode="decimal" step="any"></div>
+      <div><label for="colchon">Colchón intocable</label><input id="colchon" type="number" inputmode="decimal" step="any"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Últimos movimientos</h2>
+    <ul id="lista"></ul>
+  </section>
+</main>
+
+<script>
+const KEY = "asistente-dinero-v1";
+const $ = id => document.getElementById(id);
+const mxn = n => n.toLocaleString("es-MX", {style:"currency", currency:"MXN"});
+const num = v => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
+
+const inicial = {efectivo:300, cajita:608.01, deuda:1520.51, colchon:0, mov:[]};
+let s;
+try { s = Object.assign({}, inicial, JSON.parse(localStorage.getItem(KEY) || "{}")); }
+catch (e) { s = Object.assign({}, inicial); }
+
+function guardar() { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {} }
+const margen = () => s.efectivo + s.cajita - s.deuda - s.colchon;
+
+function render() {
+  const m = margen(), liq = s.efectivo + s.cajita;
+  const hero = $("hero");
+  $("margen").textContent = mxn(Math.max(0, m));
+  hero.classList.toggle("ok", m > 0);
+  if (m > 0) {
+    $("msg").textContent = "Tienes espacio para un gusto sin romper tu plan totalero.";
+  } else {
+    $("msg").textContent = "Primero cubre tu tarjeta: te faltan " + mxn(-m) + ".";
+  }
+  const meta = s.deuda + s.colchon;
+  const pct = meta > 0 ? Math.min(100, Math.max(0, liq / meta * 100)) : 100;
+  $("barfill").style.width = pct + "%";
+  $("barnote").textContent = "Liquidez " + mxn(liq) + " de " + mxn(meta) + " (tarjeta + colchón)";
+
+  ["efectivo", "cajita", "deuda", "colchon"].forEach(k => {
+    if (document.activeElement !== $(k)) $(k).value = s[k];
+  });
+
+  const ul = $("lista");
+  ul.innerHTML = "";
+  if (!s.mov.length) {
+    const li = document.createElement("li");
+    li.innerHTML = '<span class="empty">Aún no hay movimientos.</span>';
+    ul.appendChild(li);
+  }
+  s.mov.slice(-6).reverse().forEach(x => {
+    const li = document.createElement("li");
+    const izq = document.createElement("span");
+    izq.textContent = x.nota || (x.tipo === "pago" ? "Pago de tarjeta" : x.tipo === "ingreso" ? "Ingreso" : "Gasto");
+    const sm = document.createElement("small");
+    sm.textContent = x.cuenta + " · " + new Date(x.fecha).toLocaleDateString("es-MX", {day:"numeric", month:"short"});
+    izq.appendChild(sm);
+    const der = document.createElement("span");
+    der.className = x.tipo === "ingreso" ? "pos" : "neg";
+    der.textContent = (x.tipo === "ingreso" ? "+" : "−") + mxn(x.monto);
+    li.append(izq, der);
+    ul.appendChild(li);
+  });
+  consulta();
+}
+
+function consulta() {
+  const q = num($("q").value), v = $("verdict"), m = margen();
+  v.className = "verdict";
+  if (q <= 0) return;
+  if (m >= q) {
+    v.className = "verdict yes";
+    v.textContent = "Sí te alcanza. Te quedarían " + mxn(m - q) + " de margen. Puedes pagarlo con tarjeta: tu margen ya cubre ese cargo y sigues totalero.";
+  } else {
+    v.className = "verdict no";
+    v.textContent = "Mejor espera: te faltan " + mxn(q - Math.max(0, m)) + ". Si es indispensable, que salga de tu efectivo o Cajita, no de la tarjeta, porque la tarjeta aumentaría lo que tienes que pagar completo.";
+  }
+}
+
+["efectivo", "cajita", "deuda", "colchon"].forEach(k => {
+  $(k).addEventListener("input", () => { s[k] = num($(k).value); guardar(); render(); });
+});
+$("q").addEventListener("input", consulta);
+
+$("guardar").addEventListener("click", () => {
+  const tipo = $("tipo").value, cuenta = $("cuenta").value, monto = num($("monto").value), nota = $("nota").value.trim();
+  const t = $("toast");
+  t.style.color = "var(--bad)";
+  if (monto <= 0) { t.textContent = "Escribe un monto mayor a 0."; return; }
+  if (tipo === "ingreso" && cuenta === "tarjeta") { t.textContent = "Un ingreso entra a efectivo o Cajita."; return; }
+  if (tipo === "pago" && cuenta === "tarjeta") { t.textContent = "Elige de dónde sale el pago: efectivo o Cajita."; return; }
+  if (tipo === "gasto") {
+    if (cuenta === "tarjeta") s.deuda += monto; else s[cuenta] -= monto;
+  } else if (tipo === "ingreso") {
+    s[cuenta] += monto;
+  } else {
+    s[cuenta] -= monto;
+    s.deuda = Math.max(0, s.deuda - monto);
+  }
+  s.mov.push({fecha:new Date().toISOString(), tipo, cuenta, monto, nota});
+  if (s.mov.length > 200) s.mov = s.mov.slice(-200);
+  guardar();
+  $("monto").value = ""; $("nota").value = "";
+  t.style.color = "var(--ok)";
+  t.textContent = "Listo, guardado.";
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
