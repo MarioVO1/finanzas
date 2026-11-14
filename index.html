@@ -73,6 +73,8 @@ label.f{display:block;font-size:12px;color:var(--muted);margin:0 0 4px}
 .btn{width:100%;border:1px solid var(--gold);background:var(--gold-soft);color:var(--gold);border-radius:10px;padding:12px;font-weight:700;font-size:15px}
 .btn:hover{background:var(--gold);color:#1a1405}
 .btn.ghost{background:transparent;font-size:13px;padding:9px;font-weight:600}
+input[type="date"].in{display:block;width:100%;min-width:0;max-width:100%;-webkit-appearance:none;appearance:none;min-height:46px;text-align:left}
+input[type="date"].in::-webkit-date-and-time-value{text-align:left}
 .err{color:var(--warn);font-size:12.5px;min-height:18px;margin:-4px 0 8px}
 .donut{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .donut svg{width:132px;height:132px;flex:none}
@@ -462,7 +464,7 @@ function addMov(){
   var fecha=$('#fecha').value||ymd(new Date());
   var esG=ui.tipo==='gasto';
   var mov={id:uid(),tipo:ui.tipo,monto:Math.round(monto*100)/100,cat:esG?ui.cat:ui.catIng,metodo:esG?ui.metodo:'',fecha:fecha,nota:$('#nota').value.trim().slice(0,60),pagado:false};
-  commit(function(){ state.movs.push(mov); ui.mes=mesDe(fecha); },(esG?'Gasto':'Ingreso')+' de '+money(monto)+' guardado.',false);
+  commit(function(){ state.movs.push(mov); ui.mes=mesDe(fecha); if(esG&&mov.metodo==="Efectivo") state.caja.efectivo=Math.round(((state.caja.efectivo||0)-mov.monto)*100)/100; },(esG?'Gasto':'Ingreso')+' de '+money(monto)+' guardado.',false);
   $('#monto').value=''; $('#nota').value='';
 }
 document.addEventListener('click',function(e){
@@ -477,7 +479,7 @@ document.addEventListener('click',function(e){
   else if(a==='mes-next'){ if(ui.mes<ymd(hoyD).slice(0,7)){ ui.mes=mesesAtras(ui.mes,1); render(); } }
   else if(a==='ir-mes'){ ui.mes=v; render(); }
   else if(a==='edit-presup'){ ui.editPres=!ui.editPres; renderPresup(); }
-  else if(a==='del'){ var id=t.dataset.id; commit(function(){ state.movs=state.movs.filter(function(m){return m.id!==id}); },'Movimiento eliminado.',true); }
+  else if(a==='del'){ var id=t.dataset.id; var old=state.movs.filter(function(m){return m.id===id})[0]; commit(function(){ state.movs=state.movs.filter(function(m){return m.id!==id}); if(old&&old.tipo==="gasto"&&old.metodo==="Efectivo") state.caja.efectivo=Math.round(((state.caja.efectivo||0)+old.monto)*100)/100; },'Movimiento eliminado.',true); }
   else if(a==='pagar-tarjeta'){
     if(!calcDeuda(state.movs)&&!state.caja.previa){ toast('No debes nada en la tarjeta.'); return; }
     commit(function(){ state.caja.previa=0; state.movs.forEach(function(m){ if(m.tipo==='gasto'&&m.metodo==='Crédito') m.pagado=true; }); },'Tarjeta marcada como pagada.',true);
