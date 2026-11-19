@@ -75,6 +75,7 @@ label.f{display:block;font-size:12px;color:var(--muted);margin:0 0 4px}
 .btn.ghost{background:transparent;font-size:13px;padding:9px;font-weight:600}
 input[type="date"].in{display:block;width:100%;min-width:0;max-width:100%;-webkit-appearance:none;appearance:none;min-height:46px;text-align:left}
 input[type="date"].in::-webkit-date-and-time-value{text-align:left}
+.payrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .err{color:var(--warn);font-size:12.5px;min-height:18px;margin:-4px 0 8px}
 .donut{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .donut svg{width:132px;height:132px;flex:none}
@@ -171,7 +172,7 @@ ul.movs{list-style:none;margin:0;padding:0;max-height:760px;overflow-y:auto}
         <label class="money-in" for="monto"><span>$</span><input id="monto" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00"></label>
         <div class="chips" id="chips-cat" role="group" aria-label="Categoría"></div>
         <div id="metodo-wrap">
-          <label class="f">Con qué pagaste</label>
+          <label class="f" id="lbl-metodo">Con qué pagaste</label>
           <div class="chips" id="chips-metodo" role="group" aria-label="Método de pago"></div>
         </div>
         <label class="f" for="fecha">Fecha</label>
@@ -193,7 +194,9 @@ ul.movs{list-style:none;margin:0;padding:0;max-height:760px;overflow-y:auto}
           <label for="c-previa">Saldo anterior de tarjeta</label><input class="in" id="c-previa" type="text" inputmode="decimal">
           <label>Deuda total de tarjeta</label><span class="ro" id="c-deuda"></span>
         </div>
-        <button class="btn ghost" type="button" data-act="pagar-tarjeta">Ya pagué la tarjeta</button>
+        <label class="f" for="pago-monto">Pagar tarjeta (sale de tus cajitas)</label>
+        <input class="in" id="pago-monto" type="text" inputmode="decimal" placeholder="Cuánto pagaste" autocomplete="off">
+        <div class="payrow"><button class="btn ghost" type="button" data-act="pagar-tarjeta">Registrar pago</button><button class="btn ghost" type="button" data-act="pago-total">Pagar todo</button></div>
         <p class="note" id="pago-info"></p>
       </section>
     </div>
@@ -301,7 +304,7 @@ function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&am
 var token=''; try{ token=localStorage.getItem(TK)||''; }catch(e){}
 var state={movs:[],presup:{},caja:{efectivo:0,ahorro:0,colchon:0,previa:0}};
 var hoyD=new Date();
-var ui={mes:ymd(hoyD).slice(0,7),tipo:'gasto',cat:'Súper',catIng:'Beca',metodo:'Efectivo',filtro:'todos',editPres:false};
+var ui={mes:ymd(hoyD).slice(0,7),tipo:'gasto',cat:'Súper',catIng:'Beca',metodo:'Efectivo',destino:'Cajitas',filtro:'todos',editPres:false};
 
 /* ---------- servidor ---------- */
 function rpc(name,args){
@@ -335,7 +338,7 @@ function handleErr(e){
   else setStatus('Sin conexión con la base de datos.',true);
 }
 function editing(){
-  var a=document.activeElement; return !!(a&&a.matches&&a.matches('#c-efectivo,#c-ahorro,#c-colchon,#c-previa,[data-cat],#monto,#nota'));
+  var a=document.activeElement; return !!(a&&a.matches&&a.matches('#c-efectivo,#c-ahorro,#c-colchon,#c-previa,[data-cat],#monto,#nota,#pago-monto'));
 }
 function load(silent){
   if(!token){ showLock(''); return Promise.resolve(); }
@@ -381,8 +384,10 @@ function hideToast(){ $('#toast').classList.remove('on'); }
 function renderChips(){
   var cats=ui.tipo==='gasto'?CATS:ING, sel=ui.tipo==='gasto'?ui.cat:ui.catIng;
   $('#chips-cat').innerHTML=cats.map(function(c){return '<button type="button" class="chip" data-act="cat" data-v="'+esc(c)+'" aria-pressed="'+(c===sel)+'">'+esc(c)+'</button>'}).join('');
-  $('#chips-metodo').innerHTML=METODOS.map(function(c){return '<button type="button" class="chip" data-act="metodo" data-v="'+c+'" aria-pressed="'+(c===ui.metodo)+'">'+c+'</button>'}).join('');
-  $('#metodo-wrap').hidden=ui.tipo!=='gasto';
+  var esG0=ui.tipo==='gasto', lista=esG0?METODOS:['Cajitas','Efectivo'], selM=esG0?ui.metodo:ui.destino, actM=esG0?'metodo':'destino';
+  $('#chips-metodo').innerHTML=lista.map(function(c){return '<button type="button" class="chip" data-act="'+actM+'" data-v="'+c+'" aria-pressed="'+(c===selM)+'">'+c+'</button>'}).join('');
+  $('#lbl-metodo').textContent=esG0?'Con qué pagaste':'A dónde entró';
+  $('#metodo-wrap').hidden=false;
   document.querySelectorAll('[data-act="tipo"]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.v===ui.tipo))});
 }
 function renderHeader(){
@@ -457,14 +462,34 @@ function renderMovs(){
 function render(){ renderHeader(); renderKpis(); renderCats(); renderBars(); renderPresup(); renderMargen(); renderMovs(); }
 
 /* ---------- acciones ---------- */
+function ajusteCaja(m,dir){
+  var k=null;
+  if(m.tipo==="gasto") k=m.metodo==="Efectivo"?"efectivo":m.metodo==="Débito"?"ahorro":null;
+  else k=m.metodo==="Efectivo"?"efectivo":m.metodo==="Cajitas"?"ahorro":null;
+  if(!k) return;
+  var delta=(m.tipo==="gasto"?-1:1)*m.monto*dir;
+  state.caja[k]=Math.round(((state.caja[k]||0)+delta)*100)/100;
+}
+function pagarTarjeta(monto){
+  var deuda=calcDeuda(state.movs)+(state.caja.previa||0);
+  if(!(monto>0)){ toast("Escribe cuánto pagaste."); return; }
+  if(monto>deuda+0.005){ toast("Eso es más de lo que debes ("+money(deuda)+")."); return; }
+  commit(function(){
+    var pend=0;
+    state.movs.forEach(function(m){ if(m.tipo==="gasto"&&m.metodo==="Crédito"&&!m.pagado){ pend+=m.monto; m.pagado=true; } });
+    state.caja.previa=Math.max(0,Math.round(((state.caja.previa||0)+pend-monto)*100)/100);
+    state.caja.ahorro=Math.round(((state.caja.ahorro||0)-monto)*100)/100;
+  },"Pago de "+money(monto)+" registrado. Te quedan "+money(Math.max(0,deuda-monto))+" por pagar.",true);
+  $("#pago-monto").value="";
+}
 function addMov(){
   var monto=parseMonto($('#monto').value);
   if(!(monto>0)){ $('#err').textContent='Escribe un monto mayor a cero.'; $('#monto').focus(); return; }
   $('#err').textContent='';
   var fecha=$('#fecha').value||ymd(new Date());
   var esG=ui.tipo==='gasto';
-  var mov={id:uid(),tipo:ui.tipo,monto:Math.round(monto*100)/100,cat:esG?ui.cat:ui.catIng,metodo:esG?ui.metodo:'',fecha:fecha,nota:$('#nota').value.trim().slice(0,60),pagado:false};
-  commit(function(){ state.movs.push(mov); ui.mes=mesDe(fecha); if(esG&&mov.metodo==="Efectivo") state.caja.efectivo=Math.round(((state.caja.efectivo||0)-mov.monto)*100)/100; },(esG?'Gasto':'Ingreso')+' de '+money(monto)+' guardado.',false);
+  var mov={id:uid(),tipo:ui.tipo,monto:Math.round(monto*100)/100,cat:esG?ui.cat:ui.catIng,metodo:esG?ui.metodo:ui.destino,fecha:fecha,nota:$('#nota').value.trim().slice(0,60),pagado:false};
+  commit(function(){ state.movs.push(mov); ui.mes=mesDe(fecha); ajusteCaja(mov,1); },(esG?'Gasto':'Ingreso')+' de '+money(monto)+' guardado.',false);
   $('#monto').value=''; $('#nota').value='';
 }
 document.addEventListener('click',function(e){
@@ -479,11 +504,10 @@ document.addEventListener('click',function(e){
   else if(a==='mes-next'){ if(ui.mes<ymd(hoyD).slice(0,7)){ ui.mes=mesesAtras(ui.mes,1); render(); } }
   else if(a==='ir-mes'){ ui.mes=v; render(); }
   else if(a==='edit-presup'){ ui.editPres=!ui.editPres; renderPresup(); }
-  else if(a==='del'){ var id=t.dataset.id; var old=state.movs.filter(function(m){return m.id===id})[0]; commit(function(){ state.movs=state.movs.filter(function(m){return m.id!==id}); if(old&&old.tipo==="gasto"&&old.metodo==="Efectivo") state.caja.efectivo=Math.round(((state.caja.efectivo||0)+old.monto)*100)/100; },'Movimiento eliminado.',true); }
-  else if(a==='pagar-tarjeta'){
-    if(!calcDeuda(state.movs)&&!state.caja.previa){ toast('No debes nada en la tarjeta.'); return; }
-    commit(function(){ state.caja.previa=0; state.movs.forEach(function(m){ if(m.tipo==='gasto'&&m.metodo==='Crédito') m.pagado=true; }); },'Tarjeta marcada como pagada.',true);
-  }
+  else if(a==='del'){ var id=t.dataset.id; var old=state.movs.filter(function(m){return m.id===id})[0]; commit(function(){ state.movs=state.movs.filter(function(m){return m.id!==id}); if(old) ajusteCaja(old,-1); },'Movimiento eliminado.',true); }
+  else if(a==='pagar-tarjeta'){ pagarTarjeta(parseMonto($('#pago-monto').value)); }
+  else if(a==='pago-total'){ var dt=calcDeuda(state.movs)+(state.caja.previa||0); $('#pago-monto').value=dt>0?String(Math.round(dt*100)/100):''; $('#pago-monto').focus(); }
+  else if(a==='destino'){ ui.destino=v; renderChips(); }
   else if(a==='salir'){ try{ localStorage.removeItem(TK); }catch(x){} token=''; state={movs:[],presup:{},caja:{efectivo:0,ahorro:0,colchon:0,previa:0}}; render(); showLock(''); }
 });
 document.addEventListener('change',function(e){
@@ -497,6 +521,7 @@ document.addEventListener('change',function(e){
     commit(function(){ state.presup[t.dataset.cat]=parseMonto(t.value); },null,false);
   }
 });
+$('#pago-monto').addEventListener('keydown',function(e){ if(e.key==='Enter') pagarTarjeta(parseMonto($('#pago-monto').value)); });
 ['#monto','#nota','#fecha'].forEach(function(s){ $(s).addEventListener('keydown',function(e){ if(e.key==='Enter') addMov(); }); });
 $('#lock-form').addEventListener('submit',function(e){
   e.preventDefault();
